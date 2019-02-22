@@ -80,10 +80,11 @@ def main(args):
             mels = data_batch["mel"]
             specs = data_batch["spec"]
 
-            mels_input = mels[:, :-1, :]
+            mels_input = mels[:, :-1, :]  # (batch, lenght, num_mels)
             mels_input = mels_input[:, :, -hp.n_mels:]
             ref_mels = mels[:, 1:, :]
             # print(np.shape(mels))
+            # print(np.shape(mels_input))
             # print(np.shape(ref_mels))
 
             if torch.cuda.is_available():
