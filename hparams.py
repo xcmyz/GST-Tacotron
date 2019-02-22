@@ -26,6 +26,7 @@ hidden_size = 128
 embedding_size = 256
 teacher_forcing_ratio = 1.0
 max_iters = 200
+max_Ty = 200
 # reference encoder
 ref_enc_filters = [32, 32, 64, 64, 128, 128]
 ref_enc_size = [3, 3]
