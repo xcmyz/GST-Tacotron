@@ -46,15 +46,15 @@ vocab = "PE abcdefghijklmnopqrstuvwxyz'.?"
 
 # Training:
 outputs_per_step = 5
-batch_size = 32
-epochs = 10
-lr = 0.0001
+batch_size = 12
+epochs = 100
+lr = 0.00005
 clip_value = 1.
 loss_weight = 0.5
 # decay_step = [500000, 1000000, 2000000]
 decay_step = [20, 60]
 # save_step = 2000
-save_step = 20
+save_step = 100
 # log_step = 200
 log_step = 5
 clear_Time = 20

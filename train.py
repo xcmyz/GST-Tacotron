@@ -1,3 +1,5 @@
+import ctypes
+import inspect
 import torch
 import torch.nn as nn
 from torch import optim
@@ -10,6 +12,9 @@ import numpy as np
 import argparse
 import os
 import time
+import threading
+
+Global_Checkpoint = 0
 
 
 def main(args):
@@ -144,7 +149,7 @@ def main(args):
             # print(current_step)
             # if current_step % hp.log_step == 0:
             #     print(loss)
-            print(loss)
+            # print(loss)
             Loss.append(loss)
             # et = time.clock()
             # print(et - st)
@@ -154,7 +159,7 @@ def main(args):
             loss.backward()
 
             # Clipping gradients to avoid gradient explosion
-            nn.utils.clip_grad_norm_(model.parameters(), hp.clip_value)
+            nn.utils.clip_grad_norm_(model.parameters(), 1.)
 
             # Update weights
             optimizer.step()
@@ -182,6 +187,9 @@ def main(args):
                 torch.save({'model': model.state_dict(), 'optimizer': optimizer.state_dict(
                 )}, os.path.join(hp.checkpoint_path, 'checkpoint_%d.pth.tar' % current_step))
                 print("save model at step %d ..." % current_step)
+                global Global_Checkpoint
+                Global_Checkpoint = current_step
+                # print(Global_Checkpoint)
 
             if current_step in hp.decay_step:
                 optimizer = adjust_learning_rate(optimizer, current_step)
@@ -234,19 +242,58 @@ def adjust_learning_rate(optimizer, step):
 #         return torch.Tensor(np.concatenate((stan.cpu(), frame_arr), axis=2)).to(device)
 
 
+def _async_raise(tid, exctype):
+    """raises the exception, performs cleanup if needed"""
+    tid = ctypes.c_long(tid)
+    if not inspect.isclass(exctype):
+        exctype = type(exctype)
+    res = ctypes.pythonapi.PyThreadState_SetAsyncExc(
+        tid, ctypes.py_object(exctype))
+    if res == 0:
+        raise ValueError("invalid thread id")
+    elif res != 1:
+        # """if it returns a number greater than one, you're in trouble,
+        # and you should call it again with exc=NULL to revert the effect"""
+        ctypes.pythonapi.PyThreadState_SetAsyncExc(tid, None)
+        raise SystemError("PyThreadState_SetAsyncExc failed")
+
+
+def stop_thread(thread):
+    _async_raise(thread.ident, SystemExit)
+
+
+def ProcessException(args):
+    try:
+        thread = threading.Thread(main(args))
+        thread.start()
+    except RuntimeError:
+        print("Run Time Error at %d" % Global_Checkpoint)
+        stop_thread(thread)
+        args.restore_step = Global_Checkpoint
+        # print("############")
+        ProcessException(args)
+        # print("###########")
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument('--dataset_path', type=str,
                         help='dataset path', default='dataset')
-    # parser.add_argument('--restore_step', type=int,
-    #                     help='Global step to restore checkpoint', default=0)
-    # parser.add_argument('--batch_size', type=int,
-    #                     help='Batch size', default=hp.batch_size)
-
-    # Test
-    parser.add_argument('--batch_size', type=int, help='Batch size', default=2)
     parser.add_argument('--restore_step', type=int,
                         help='Global step to restore checkpoint', default=0)
+    parser.add_argument('--batch_size', type=int,
+                        help='Batch size', default=hp.batch_size)
+
+    # # Test
+    # parser.add_argument('--batch_size', type=int, help='Batch size', default=2)
+    # parser.add_argument('--restore_step', type=int,
+    #                     help='Global step to restore checkpoint', default=0)
 
     args = parser.parse_args()
+    # try:
+    #     main(args)
+    # except RuntimeError:
+    #     print("Run Time Error")
+    #     ProcessException()
+    # ProcessException(args)
     main(args)
