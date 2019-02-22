@@ -93,11 +93,29 @@ def main(args):
             else:
                 texts = torch.from_numpy(texts).type(
                     torch.LongTensor).to(device)
-            mels = torch.from_numpy(mels).to(device)
-            specs = torch.from_numpy(specs).to(device)
-            mels_input = torch.from_numpy(mels_input).to(device)
-            ref_mels = torch.from_numpy(ref_mels).to(device)
+            if torch.cuda.is_available():
+                mels = torch.from_numpy(mels).type(
+                    torch.cuda.FloatTensor).to(device)
+                specs = torch.from_numpy(specs).type(
+                    torch.cuda.FloatTensor).to(device)
+            else:
+                mels = torch.from_numpy(mels).type(
+                    torch.FloatTensor).to(device)
+                specs = torch.from_numpy(specs).type(
+                    torch.FloatTensor).to(device)
+            if torch.cuda.is_available():
+                mels_input = torch.from_numpy(mels_input).type(
+                    torch.cuda.FloatTensor).to(device)
+                ref_mels = torch.from_numpy(ref_mels).type(
+                    torch.cuda.FloatTensor).to(device)
+            else:
+                mels_input = torch.from_numpy(mels_input).type(
+                    torch.FloatTensor).to(device)
+                ref_mels = torch.from_numpy(ref_mels).type(
+                    torch.FloatTensor).to(device)
             # print(np.shape(specs))
+            # print(np.shape(mels_input))
+            # print(np.shape(ref_mels))
 
             # Forward
             mel_output, linear_output, _ = model(texts, mels_input, ref_mels)
@@ -114,10 +132,12 @@ def main(args):
             #     linear_output - compare(linear_output, specs[:, 1:, :], device))
             # linear_loss = torch.mean(linear_loss)
             # print(mel_output)
+            # print(type(mel_output))
+            # print(type(mels))
             mel_loss = torch.mean(torch.abs(mel_output - mels[:, 1:, :]))
             # print(mel_loss)
             linear_loss = torch.mean(
-                torch.abs(linear_output - specs[:, 1:, :]))
+                torch.abs(linear_output - specs))
             # print(linear_loss)
             loss = mel_loss + hp.loss_weight * linear_loss
             loss = loss.to(device)

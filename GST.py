@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 import torch.nn.functional as F
+import numpy as np
 import hparams as hp
 
 
@@ -48,8 +49,10 @@ class ReferenceEncoder(nn.Module):
     def forward(self, inputs):
         N = inputs.size(0)
         out = inputs.view(N, 1, -1, hp.n_mels)  # [N, 1, Ty, n_mels]
+        # print(np.shape(out))
         for conv, bn in zip(self.convs, self.bns):
             out = conv(out)
+            # print("#############################")
             out = bn(out)
             out = F.relu(out)  # [N, 128, Ty//2^K, n_mels//2^K]
 

@@ -3,7 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import hparams as hp
 
-
 class Conv1d(nn.Module):
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding='same'):

@@ -11,8 +11,8 @@ class Tacotron(nn.Module):
         texts: [N, T_x]
         mels: [N, T_y/r, n_mels*r]
     output:
-        mels --- [N, T_y/r, n_mels*r] change to [N, T_y/r, n_mels]
-        mags --- [N, T_y, 1+n_fft//2] change to [N, T_y/r, 1+n_fft//2]
+        mels --- [N, T_y/r, n_mels*r]
+        mags --- [N, T_y, 1+n_fft//2]
         attn_weights --- [N, T_y/r, T_x]
     '''
 
@@ -50,23 +50,18 @@ class Encoder(nn.Module):
         super().__init__()
         self.prenet = PreNet(in_features=hp.E)  # [N, T, E//2]
 
-        self.conv1d_bank = Conv1dBank(
-            K=hp.K, in_channels=hp.E // 2, out_channels=hp.E // 2)  # [N, T, E//2 * K]
+        self.conv1d_bank = Conv1dBank(K=hp.K, in_channels=hp.E // 2, out_channels=hp.E // 2)  # [N, T, E//2 * K]
 
-        self.conv1d_1 = Conv1d(in_channels=hp.K * hp.E // 2,
-                               out_channels=hp.E // 2, kernel_size=3)  # [N, T, E//2]
-        self.conv1d_2 = Conv1d(
-            in_channels=hp.E // 2, out_channels=hp.E // 2, kernel_size=3)  # [N, T, E//2]
+        self.conv1d_1 = Conv1d(in_channels=hp.K * hp.E // 2, out_channels=hp.E // 2, kernel_size=3)  # [N, T, E//2]
+        self.conv1d_2 = Conv1d(in_channels=hp.E // 2, out_channels=hp.E // 2, kernel_size=3)  # [N, T, E//2]
         self.bn1 = BatchNorm1d(num_features=hp.E // 2)
         self.bn2 = BatchNorm1d(num_features=hp.E // 2)
 
         self.highways = nn.ModuleList()
         for i in range(hp.num_highways):
-            self.highways.append(
-                Highway(in_features=hp.E // 2, out_features=hp.E // 2))
+            self.highways.append(Highway(in_features=hp.E // 2, out_features=hp.E // 2))
 
-        self.gru = nn.GRU(input_size=hp.E // 2, hidden_size=hp.E //
-                          2, num_layers=2, bidirectional=True, batch_first=True)
+        self.gru = nn.GRU(input_size=hp.E // 2, hidden_size=hp.E // 2, num_layers=2, bidirectional=True, batch_first=True)
 
     def forward(self, inputs, prev_hidden=None):
         # prenet
@@ -113,16 +108,12 @@ class Decoder(nn.Module):
         super().__init__()
         self.prenet = PreNet(hp.n_mels)
         self.attn_rnn = AttentionRNN()
-        self.attn_projection = nn.Linear(
-            in_features=2 * hp.E, out_features=hp.E)
-        self.gru1 = nn.GRU(input_size=hp.E, hidden_size=hp.E,
-                           batch_first=True, bidirectional=False)
-        self.gru2 = nn.GRU(input_size=hp.E, hidden_size=hp.E,
-                           batch_first=True, bidirectional=False)
-        self.fc1 = nn.Linear(in_features=hp.E, out_features=hp.n_mels)
+        self.attn_projection = nn.Linear(in_features=2 * hp.E, out_features=hp.E)
+        self.gru1 = nn.GRU(input_size=hp.E, hidden_size=hp.E, batch_first=True, bidirectional=False)
+        self.gru2 = nn.GRU(input_size=hp.E, hidden_size=hp.E, batch_first=True, bidirectional=False)
+        self.fc1 = nn.Linear(in_features=hp.E, out_features=hp.n_mels * hp.r)
         self.cbhg = DecoderCBHG()  # Deng
-        self.fc2 = nn.Linear(
-            in_features=hp.E, out_features=1 + hp.n_fft // 2)  # Deng
+        self.fc2 = nn.Linear(in_features=hp.E, out_features=1 + hp.n_fft // 2)  # Deng
 
     def forward(self, inputs, memory):
         if self.training:
@@ -132,16 +123,13 @@ class Decoder(nn.Module):
             attn_weights, outputs, attn_hidden = self.attn_rnn(outputs, memory)
 
             attn_apply = torch.bmm(attn_weights, memory)  # [N, T_y/r, E]
-            attn_project = self.attn_projection(
-                torch.cat([attn_apply, outputs], dim=2))  # [N, T_y/r, E]
+            attn_project = self.attn_projection(torch.cat([attn_apply, outputs], dim=2))  # [N, T_y/r, E]
 
             # GRU1
-            # outputs1--[N, T_y/r, E]  gru1_hidden--[1, N, E]
-            outputs1, gru1_hidden = self.gru1(attn_project)
+            outputs1, gru1_hidden = self.gru1(attn_project)  # outputs1--[N, T_y/r, E]  gru1_hidden--[1, N, E]
             gru_outputs1 = outputs1 + attn_project  # [N, T_y/r, E]
             # GRU2
-            # outputs2--[N, T_y/r, E]  gru2_hidden--[1, N, E]
-            outputs2, gru2_hidden = self.gru2(gru_outputs1)
+            outputs2, gru2_hidden = self.gru2(gru_outputs1)  # outputs2--[N, T_y/r, E]  gru2_hidden--[1, N, E]
             gru_outputs2 = outputs2 + gru_outputs1
 
             # generate log melspectrogram
@@ -166,20 +154,16 @@ class Decoder(nn.Module):
             attn_weights = []
             for i in range(hp.max_Ty):
                 inputs = self.prenet(inputs)
-                attn_weight, outputs, attn_hidden = self.attn_rnn(
-                    inputs, memory, attn_hidden)
+                attn_weight, outputs, attn_hidden = self.attn_rnn(inputs, memory, attn_hidden)
                 attn_weights.append(attn_weight)  # attn_weight: [1, 1, T_x]
                 attn_apply = torch.bmm(attn_weight, memory)  # [1, 1, E]
-                attn_project = self.attn_projection(
-                    torch.cat([attn_apply, outputs], dim=-1))  # [1, 1, E]
+                attn_project = self.attn_projection(torch.cat([attn_apply, outputs], dim=-1))  # [1, 1, E]
 
                 # GRU1
-                # outputs1--[1, 1, E]  gru1_hidden--[1, 1, E]
-                outputs1, gru1_hidden = self.gru1(attn_project, gru1_hidden)
+                outputs1, gru1_hidden = self.gru1(attn_project, gru1_hidden)  # outputs1--[1, 1, E]  gru1_hidden--[1, 1, E]
                 outputs1 = outputs1 + attn_project  # [1, T_y/r, E]
                 # GRU2
-                # outputs2--[1, T_y/r, E]  gru2_hidden--[1, 1, E]
-                outputs2, gru2_hidden = self.gru2(outputs1, gru2_hidden)
+                outputs2, gru2_hidden = self.gru2(outputs1, gru2_hidden)  # outputs2--[1, T_y/r, E]  gru2_hidden--[1, 1, E]
                 outputs2 = outputs2 + outputs1
 
                 # generate log melspectrogram
@@ -208,23 +192,18 @@ class DecoderCBHG(nn.Module):
     def __init__(self):
         super().__init__()
 
-        self.conv1d_bank = Conv1dBank(
-            K=hp.decoder_K, in_channels=hp.n_mels, out_channels=hp.E // 2)
+        self.conv1d_bank = Conv1dBank(K=hp.decoder_K, in_channels=hp.n_mels, out_channels=hp.E // 2)
 
-        self.conv1d_1 = Conv1d(in_channels=hp.decoder_K *
-                               hp.E // 2, out_channels=hp.E, kernel_size=3)
+        self.conv1d_1 = Conv1d(in_channels=hp.decoder_K * hp.E // 2, out_channels=hp.E, kernel_size=3)
         self.bn1 = BatchNorm1d(hp.E)
-        self.conv1d_2 = Conv1d(
-            in_channels=hp.E, out_channels=hp.n_mels, kernel_size=3)
+        self.conv1d_2 = Conv1d(in_channels=hp.E, out_channels=hp.n_mels, kernel_size=3)
         self.bn2 = BatchNorm1d(hp.n_mels)
 
         self.highways = nn.ModuleList()
         for i in range(hp.num_highways):
-            self.highways.append(
-                Highway(in_features=hp.n_mels, out_features=hp.n_mels))
+            self.highways.append(Highway(in_features=hp.n_mels, out_features=hp.n_mels))
 
-        self.gru = nn.GRU(input_size=hp.n_mels, hidden_size=hp.E //
-                          2, num_layers=2, bidirectional=True, batch_first=True)
+        self.gru = nn.GRU(input_size=hp.n_mels, hidden_size=hp.E // 2, num_layers=2, bidirectional=True, batch_first=True)
 
     def forward(self, inputs, prev_hidden=None):
         inputs = inputs.view(inputs.size(0), -1, hp.n_mels)  # [N, T, n_mels]

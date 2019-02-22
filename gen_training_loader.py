@@ -29,6 +29,7 @@ class SpeechData(Dataset):
         spec_name = os.path.join(
             self.datasetPath, "ljspeech-spec-%05d.npy" % index)
         # print(dir_name)
+
         character = self.text[idx]
         # print(character)
         character = text_to_sequence(character, [hparams.cleaners])
@@ -36,6 +37,20 @@ class SpeechData(Dataset):
         # print("#################")
         mel_np = np.load(mel_name)
         spec_np = np.load(spec_name)
+
+        # print(np.shape(mel_np))
+        # print(np.shape(spec_np))
+        t = np.shape(mel_np)[0]
+        num_paddings = hparams.r - \
+            (t % hparams.r) if t % hparams.r != 0 else 0  # for reduction
+        mel_np = np.pad(mel_np, [[0, num_paddings], [0, 0]], mode="constant")
+        mel_np = mel_np.reshape((-1, hparams.n_mels * hparams.r))
+        GO_mel = np.zeros((1, np.shape(mel_np)[1]))
+        mel_np = np.concatenate((GO_mel, mel_np))
+        spec_np = np.pad(spec_np, [[0, num_paddings], [0, 0]], mode="constant")
+        # print(np.shape(mel_np))
+        # print(np.shape(spec_np))
+        # print()
 
         # # print(mel_np)
         # print(np.shape(mel_np))
@@ -132,7 +147,7 @@ def pad_seq_spec(inputs):
     # a  = np.stack([pad(x,max_len) for x in inputs])
     # print(np.shape(a))
     # print(type(a))
-    return np.stack([pad(x,max_len) for x in inputs])
+    return np.stack([pad(x, max_len) for x in inputs])
 
 
 # def pad_sequence(sequences):
